@@ -1,15 +1,16 @@
 library(tidyverse)   # for working with the data
 library(lubridate)   # for working with datetime data
-library(skimr)       # generate a text-based overview of the data
-library(visdat)      # generate plots visualizing data types and missingness
 library(stringr)
 library(qdapRegex)
-library(ggforce)
 library(ggtext)
 library(ggrepel)
 library(rstudioapi)
 
+## Going to code location
+
 setwd(dirname(getActiveDocumentContext()$path))
+
+##Creating folders and files
 
 data_dir = 'data'
 figs_dir = 'figs'
@@ -38,9 +39,6 @@ if (!file.exists(target_file_o)) {
 olympic_dataf = read_csv(target_file_o)
 gdp_dataf = read_csv(target_file_g)
 
-## Check the packaging
-## skim(olympic_dataf)
-
 
 ## Post Soviet Union dissolution
 small_olympic_dataf <- olympic_dataf %>%
@@ -60,10 +58,11 @@ small_olympic_dataf <- olympic_dataf %>%
 ## create small table for doc export
 write.csv(head(small_olympic_dataf),file = "tables/sod.csv")
 
+
+## GDP per capita for countries in the Olympics (years matched)
 o_year <- as.character(unique(small_olympic_dataf$year))
 o_country <- unique(small_olympic_dataf$country)
 
-## GDP per capita for countries in the Olympics (years matched)
 small_gdp_dataf <- gdp_dataf %>% 
   filter(country %in% o_country) %>% 
   select(c(country,o_year))
@@ -86,19 +85,10 @@ for (i in o_year) {
 ## Create charts
 setwd("figs")
 
-df_charts <- df %>% 
-  group_by(year) %>% 
-  ## Filter by rank in olympics
-  filter(o_rank <= 15)
 
 for (i in o_year){
   df1 <- filter(df,year == i) %>%
     mutate(scaled_gdppc = log10(gdp_per_capita))
-  
-  df_top15 <- df1 %>% 
-    group_by(year) %>% 
-    ## Filter by rank in olympics
-    filter(o_rank <= 15)
   
   jpeg(paste("plot_",i, ".jpg",sep =""), width = 6, height = 6, units = 'in', res = 300)
   #plot(df1$gdp_per_capita,df1$medals, main = paste("Top 15 Medal Winners in", i), xlab="GDP Per Capita", ylab="Medals")
@@ -128,5 +118,4 @@ dev.off()
 setwd(dirname(getActiveDocumentContext()$path))
 
 ## Create tables for exports
-write.csv(head(small_olympic_dataf), "tables/sod.csv")
 write.csv(head(df1), "tables/final_df_preview.csv")
