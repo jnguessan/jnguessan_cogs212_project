@@ -5,13 +5,26 @@ library(visdat)      # generate plots visualizing data types and missingness
 library(stringr)
 library(qdapRegex)
 library(ggforce)
+library(ggtext)
+library(ggrepel)
+library(rstudioapi)
+
+setwd(dirname(getActiveDocumentContext()$path))
 
 data_dir = 'data'
+figs_dir = 'figs'
+tables_dir = 'tables'
 target_file_o = file.path(data_dir,'olympics.csv')
 target_file_g = file.path(data_dir,'gdp_per_capita.csv')
 
 if (!dir.exists(data_dir)) {
   dir.create(data_dir)
+}
+if (!dir.exists(figs_dir)) {
+  dir.create(figs_dir)
+}
+if (!dir.exists(tables_dir)) {
+  dir.create(tables_dir)
 }
 if (!file.exists(target_file_o)) {
   download.file('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-07-27/olympics.csv',target_file_o)
@@ -44,6 +57,9 @@ small_olympic_dataf <- olympic_dataf %>%
   rename(., country = team,medals = n) %>% 
   arrange(desc(medals), .by_group = TRUE)
 
+## create small table for doc export
+write.csv(head(small_olympic_dataf),file = "tables/sod.csv")
+
 o_year <- as.character(unique(small_olympic_dataf$year))
 o_country <- unique(small_olympic_dataf$country)
 
@@ -52,17 +68,14 @@ small_gdp_dataf <- gdp_dataf %>%
   filter(country %in% o_country) %>% 
   select(c(country,o_year))
 
-
-
 df <- data.frame(matrix(ncol = 6, nrow = 0))
+
 for (i in o_year) {
   df1 <- filter(small_olympic_dataf,year == i)
   #print(df1)
   df2 <- select(small_gdp_dataf, c(country,i))
   df2 <- rename(df2, gdp_per_capita = i)
   df2$gdp_per_capita = as.numeric(gsub("k", "e3", df2$gdp_per_capita))
-  df2 <- arrange(df2, desc(gdp_per_capita)) %>% 
-    mutate(gdp_rank = 1:nrow(df2))
   df1 <- merge(df1,df2,by="country",all.df1=TRUE)
   df1 <- arrange(df1, desc(medals)) %>% 
     mutate(o_rank = 1:nrow(df1))
@@ -71,21 +84,49 @@ for (i in o_year) {
 }
 
 ## Create charts
+setwd("figs")
+
 df_charts <- df %>% 
   group_by(year) %>% 
   ## Filter by rank in olympics
   filter(o_rank <= 15)
+
 for (i in o_year){
-  df1 <- filter(df_charts,year == i)
-  slices <- df1$medals
-  lbls <- df1$country %>% 
-    #paste(.,", $",df1$gdp_per_capita,sep ="") %>% 
-    paste(.,"(",df1$gdp_rank,")",sep ="")
-  jpeg(paste("pie_chart_",i, ".jpg",sep =""))
-  pie(slices,labels = lbls, main = paste("Top 15 Medal Winners in", i))
+  df1 <- filter(df,year == i) %>%
+    mutate(scaled_gdppc = log10(gdp_per_capita))
+  
+  df_top15 <- df1 %>% 
+    group_by(year) %>% 
+    ## Filter by rank in olympics
+    filter(o_rank <= 15)
+  
+  jpeg(paste("plot_",i, ".jpg",sep =""), width = 6, height = 6, units = 'in', res = 300)
+  #plot(df1$gdp_per_capita,df1$medals, main = paste("Top 15 Medal Winners in", i), xlab="GDP Per Capita", ylab="Medals")
+  p <- ggplot(df1, aes(x = scaled_gdppc, y = medals)) + geom_point() +
+    ggtitle(paste("Number of Medals vs Log10 Scaled GDP Per Capita in ",i)) +
+    xlab("Scaled GDP Per Capita") +
+    ylab("Medals") +
+    geom_label_repel(aes(label = country))
+  print(p)
   dev.off()
 }
-jpeg(file="app.jpg")
-barplot(table(df_charts$country), main = "Number of Appearances in Top 15",horiz = TRUE, las=1)
+
+jpeg(file="Total_medal_count.jpg", width = 12, height = 6, units = 'in', res = 300)
+
+dft <- arrange(df, desc(medals)) %>% 
+  group_by(country) %>% 
+  select(medals) %>% 
+  mutate(medals = sum(medals)) %>% 
+  distinct()
+
+  p<-ggplot(dft, aes(x=reorder(country, -medals), y=medals)) +
+  geom_bar(stat="identity")+
+    theme(axis.text.x = element_text(angle = 90))+ ggtitle("Countries medal counts 1992-2016") +xlab("Countries") + ylab("Medals")
+print(p)
 dev.off()
 
+setwd(dirname(getActiveDocumentContext()$path))
+
+## Create tables for exports
+write.csv(head(small_olympic_dataf), "tables/sod.csv")
+write.csv(head(df1), "tables/final_df_preview.csv")
